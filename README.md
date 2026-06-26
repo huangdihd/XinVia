@@ -46,7 +46,7 @@ Add the dependency (provided — it is supplied at runtime by the XinVia plugin 
 </repositories>
 
 <dependency>
-    <groupId>com.github.xinbot-devs</groupId>
+    <groupId>com.github.huangdihd</groupId>
     <artifactId>XinVia</artifactId>
     <version>1.0.0-RELEASE</version>
     <scope>provided</scope>
