@@ -9,6 +9,8 @@ import io.netty.handler.codec.MessageToMessageEncoder;
 import java.util.List;
 
 public class XinViaEncoder extends MessageToMessageEncoder<ByteBuf> {
+    private static final boolean DEBUG = Boolean.getBoolean("xinvia.debug");
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("XinVia");
     private final UserConnection user;
 
     public XinViaEncoder(UserConnection user) {
@@ -29,6 +31,9 @@ public class XinViaEncoder extends MessageToMessageEncoder<ByteBuf> {
             if (e instanceof com.viaversion.viaversion.exception.CancelCodecException) {
                 // Cancelled
                 return;
+            }
+            if (DEBUG) {
+                LOG.warn("[XinVia] serverbound translate failed ({} readable), passing through", bytebuf.readableBytes(), e);
             }
             out.add(bytebuf.retain());
         } finally {
