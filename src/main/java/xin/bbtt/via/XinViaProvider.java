@@ -10,6 +10,7 @@ import com.viaversion.viaversion.protocol.ProtocolPipelineImpl;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import xin.bbtt.mcbot.Bot;
 
 import java.util.UUID;
 
@@ -62,6 +63,56 @@ public final class XinViaProvider {
         new ProtocolPipelineImpl(userConnection);
 
         Via.getManager().getConnectionManager().onLoginSuccess(userConnection);
+
+        try {
+            channel.pipeline().addBefore("codec", DECODER_NAME, new XinViaDecoder(userConnection));
+            channel.pipeline().addBefore("codec", ENCODER_NAME, new XinViaEncoder(userConnection));
+        } catch (Exception e) {
+            log.error("Failed to add handlers", e);
+        }
+
+        return userConnection;
+    }
+
+    /** Convenience: {@link #setupClient(Channel, ProtocolVersion, UUID)} using the bot's own UUID. */
+    public static UserConnection setupClient(Channel channel, ProtocolVersion serverVersion) {
+        return setupClient(channel, serverVersion, Bot.INSTANCE.getProtocol().getProfile().getId());
+    }
+
+    /**
+     * Sets up a <b>full client pipeline</b> translating the entire connection
+     * (handshake/login/configuration/play) from the bot's own version to {@code serverVersion}
+     * — any client→server version gap. The bot's (client) version is detected automatically
+     * from the handshake, so callers only pass the <b>target server version</b>.
+     *
+     * <p>Unlike {@link #setup} it does <b>not</b> call {@code onLoginSuccess} — that would make
+     * ViaVersion treat the connection as already in PLAY and skip translating the
+     * HANDSHAKE/LOGIN/CONFIGURATION packets. The state is left at HANDSHAKE and ViaVersion's
+     * base protocol advances it as packets flow, so every phase is translated. Install on the
+     * first outgoing packet so the codecs are present for the handshake.
+     */
+    public static UserConnection setupClient(Channel channel,
+                                             ProtocolVersion serverVersion,
+                                             UUID uuid) {
+        if (Via.getManager() == null || Via.getManager().getProtocolManager() == null) {
+            log.warn("ViaVersion not ready yet");
+            return null;
+        }
+
+        UserConnection userConnection = new UserConnectionImpl(channel, true);
+
+        // Tell our version provider the target server version for this connection, then let
+        // ViaVersion's InitialBaseProtocol process the handshake: it reads the client version
+        // from the handshake, asks the provider for the server version, builds the protocol
+        // path, adds the translation protocols, rewrites the handshake and advances the state.
+        // So we must NOT pre-set versions or call onLoginSuccess here.
+        channel.attr(XinViaVersionProvider.TARGET_SERVER_VERSION).set(serverVersion);
+
+        ProtocolInfo protocolInfo = userConnection.getProtocolInfo();
+        protocolInfo.setState(State.HANDSHAKE);
+        protocolInfo.setUuid(uuid);
+
+        new ProtocolPipelineImpl(userConnection);
 
         try {
             channel.pipeline().addBefore("codec", DECODER_NAME, new XinViaDecoder(userConnection));

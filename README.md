@@ -48,29 +48,52 @@ Add the dependency (provided — it is supplied at runtime by the XinVia plugin 
 <dependency>
     <groupId>com.github.huangdihd</groupId>
     <artifactId>XinVia</artifactId>
-    <version>1.0.0-RELEASE</version>
+    <version>1.1.0-RELEASE</version>
     <scope>provided</scope>
 </dependency>
 ```
 
 ### 3. Code
 
+There are two entry points. Pick based on how far apart the versions are.
+
+**`setupClient` — full client pipeline, any version → any version (recommended).**
+Install it on the first outgoing packet (the handshake). ViaVersion's base protocol then
+translates the *entire* connection — handshake, login, configuration and play — so the bot
+can join a server several versions older or newer than the bot itself. Internally a custom
+version provider feeds ViaVersion the per-connection target version, so arbitrary gaps work
+(e.g. a 1.21.11 bot joining a 1.20.1 / 1.16.5 / 1.12.2 server).
+
 ```java
-import com.viaversion.viaversion.api.connection.UserConnection;
 import com.viaversion.viaversion.api.protocol.version.ProtocolVersion;
-import xin.bbtt.via.XinViaProvider;
+import org.geysermc.mcprotocollib.network.event.session.SessionAdapter;
 
-// When your channel is ready, install the codecs.
-// Versions are parameters, so you decide which client/server versions to bridge.
+private volatile boolean done = false;
+
+// in onEnable(): install Via on the first packet so the handshake is translated too
+Bot.INSTANCE.addPacketListener(new SessionAdapter() {
+    @Override public void packetSending(org.geysermc.mcprotocollib.network.event.session.PacketSendingEvent e) {
+        if (done) return;
+        done = true;
+        // Only the target server version is needed — the bot's own version and UUID
+        // are detected automatically.
+        XinViaProvider.setupClient(e.getSession().getChannel(), ProtocolVersion.v1_20);
+    }
+}, this);
+```
+
+**`setup` — play-phase only (legacy; for tiny gaps where login is already compatible).**
+
+```java
 UserConnection connection = XinViaProvider.setup(
-        channel,
-        ProtocolVersion.v1_21_11, // version this bot speaks
-        ProtocolVersion.v1_21,    // version the remote server speaks
-        playerUuid);
-
+        channel, ProtocolVersion.v1_21_11, ProtocolVersion.v1_21, playerUuid);
 // On disable / disconnect:
 XinViaProvider.teardown(channel, connection);
 ```
+
+To join **modded** old servers (Forge/NeoForge), combine `setupClient` with
+[XinModBridge](https://github.com/huangdihd/XinModBridge) (`depend: [XinVia, XinModBridge]`)
+for the FML handshake.
 
 ## Building
 
